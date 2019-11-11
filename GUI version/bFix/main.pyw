@@ -191,7 +191,6 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.boxLogging.hide()
             self.boxSilentMode.hide()
             self.boxLanguage.hide()
-            self.menuBar.hide()
 
     def initConnect(self):
         self.boxLogging.toggle()
@@ -434,6 +433,7 @@ class myObserver(PatternMatchingEventHandler):
             if self.fixfile(line)>0:
                fixedCounter += 1 
             counter += 1
+			time.sleep(0.01)
             self.ui.updateBar(counter)
             if self.ui.CFG['silentmode'] == 'False' or self.ui.CFG['silentmode'] == 'off':
                 self.MSG.insert(0,self.ui.LNG['file'].replace('\u005C','/')+line)
