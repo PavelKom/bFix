@@ -431,9 +431,9 @@ class myObserver(PatternMatchingEventHandler):
         self.MSG.clear()
         for line in fileList:
             if self.fixfile(line)>0:
-               fixedCounter += 1 
-            counter += 1
-			time.sleep(0.01)
+                fixedCounter += 1 
+                counter += 1
+                time.sleep(0.01)
             self.ui.updateBar(counter)
             if self.ui.CFG['silentmode'] == 'False' or self.ui.CFG['silentmode'] == 'off':
                 self.MSG.insert(0,self.ui.LNG['file'].replace('\u005C','/')+line)
