@@ -65,6 +65,8 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.setupUi(self)
         self.textBrowser.clear()
         self.progressBar.hide()
+        self.textAbout.hide()
+        self.pushButtonOk.hide()
         self.CFG = dict()
         self.LNG = dict()
         self.WORD = dict()
@@ -73,7 +75,6 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.postUI()
         self.initConnect()
         self.initWordReplacer()
-        
         self.observer = Observer()
         self.myobserver = myObserver(self)
         self.observer.schedule(self.myobserver, path=self.CFG['workfolder'], recursive=True)
@@ -87,7 +88,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             key, *value = line.split('=')
             defaultCFG[key] = str(value).replace("'",'').replace('[','').replace(']','')
             self.CFG[key] = str(value).replace("'",'').replace('[','').replace(']','')
-            
+
         if not os.path.exists('config.cfg'):
             with open('config.cfg', 'w+', encoding="utf-8") as defaultCfg:
                 defaultCfg.write(defaultConfig)
@@ -151,7 +152,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 readWord.close()
             if not bool(self.WORD):
                 self.textBrowser.append(self.LNG['emptywordfile'])
-        
+
 
     #GUI stuff
 
@@ -166,6 +167,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 line = line.replace('\n','')
                 key, *value = line.split('=')
                 self.LNG[key] = str(value).replace("'",'').replace('[','').replace(']','')
+            readLng.close()
 
         self.menuFile.setTitle(self.LNG['menu'])
         self.actionOpenFile.setText(self.LNG['openfilebutton'])
@@ -197,7 +199,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if self.CFG['logging'] == 'True':
             self.boxLogging.setCheckState(Qt.Checked)
         self.boxLogging.stateChanged.connect(self.updateLogButton)
-        
+
         self.boxSilentMode.toggle()
         if self.CFG['silentmode'] == 'True':
             self.boxSilentMode.setCheckState(Qt.Checked)
@@ -211,7 +213,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.actionOpenFolder.triggered.connect(self.openFolder)
         self.actionExit.triggered.connect(QtWidgets.qApp.quit)
 
-        
+
     def changeLanguageButton(self, num):
         text = languageConnectList[num]
         self.changeLanguage(text)
@@ -219,9 +221,11 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         with open ('config.cfg', 'r') as f:
                 old_data = f.read()
+                f.close()
                 new_data = old_data.replace('language='+self.CFG['language'], 'language='+text)
                 with open ('config.cfg', 'w') as f:
                     f.write(new_data)
+                    f.close()
 
     def updateLangList(self):
         #self.boxLanguage.clear()
@@ -236,7 +240,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     num = self.boxLanguage.findText(languageNameList[locale])
                 except KeyError:
                     self.addLanguageInMenu(locale)
-                    
+
     def addLanguageInMenu(self, lang):
         with open('lang/'+lang+'.lang', 'r', encoding="utf-8") as defaultCfg:
             tmpAlias = str()
@@ -256,12 +260,13 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 #self.errorLog('[Language] Broken locale file: '+line)
                 pass
             defaultCfg.close()
-            
+
     def updateLogButton(self, state):
         if state == Qt.Checked:
             self.CFG['logging'] = 'True'
             with open ('config.cfg', 'r') as f:
                 old_data = f.read()
+                f.close()
                 new_data = old_data.replace('logging=False', 'logging=True')
                 with open ('config.cfg', 'w') as f:
                     f.write(new_data)
@@ -270,6 +275,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.CFG['logging'] = 'False'
             with open ('config.cfg', 'r') as f:
                 old_data = f.read()
+                f.close()
                 new_data = old_data.replace('logging=True', 'logging=False')
                 with open ('config.cfg', 'w') as f:
                     f.write(new_data)
@@ -280,6 +286,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.CFG['silentmode'] = 'True'
             with open ('config.cfg', 'r') as f:
                 old_data = f.read()
+                f.close()
                 new_data = old_data.replace('silentmode=False', 'silentmode=True')
                 with open ('config.cfg', 'w') as f:
                     f.write(new_data)
@@ -288,6 +295,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.CFG['silentmode'] = 'False'
             with open ('config.cfg', 'r') as f:
                 old_data = f.read()
+                f.close()
                 new_data = old_data.replace('silentmode=True', 'silentmode=False')
                 with open ('config.cfg', 'w') as f:
                     f.write(new_data)
@@ -349,7 +357,7 @@ class myObserver(PatternMatchingEventHandler):
 
     def on_created(self, event):
         self.filetrack(event)
-            
+
     def filetrack(self, event):
         """
         event.event_type
@@ -364,7 +372,7 @@ class myObserver(PatternMatchingEventHandler):
 
         if (self.TmpTime-self.TmpTimeOld).seconds < 2 and self.TmpName == self.TmpNameOld:
             return
-        
+
         self.fixfile(event.src_path)
         if len(self.MSG) >0:
             self.MSG.insert(0, self.ui.LNG['hookedfile']+event.src_path)
@@ -381,10 +389,11 @@ class myObserver(PatternMatchingEventHandler):
             for key in self.ui.WORD.keys():
                 fixed += self.isReplaceWord(filepath, key, self.ui.WORD.get(key))
         return fixed
-    
+
     def isDecode(self, filepath):
         with open(filepath, "rb") as F:
             text = F.read()
+            F.close()
             enc = chardet.detect(text).get("encoding")
             if enc and enc.lower() != "utf-8":
                 self.MSG.append('        ' +enc+ ' --> UTF-8')
@@ -392,6 +401,7 @@ class myObserver(PatternMatchingEventHandler):
                 text = text.encode("utf-8")
                 with open(filepath, "wb") as f:
                     f.write(text)
+                    f.close()
                     return 1
             else:
                 return 0
@@ -399,6 +409,7 @@ class myObserver(PatternMatchingEventHandler):
     def isReplaceWord(self, filepath, bad, good):
         with open (filepath, 'r', encoding="utf-8") as f:
             old_data = f.read()
+            f.close()
 
         if old_data.count(bad) > 0:
             self.MSG.append("        '" +bad+ "' >>> '" +good+"'")
@@ -406,6 +417,7 @@ class myObserver(PatternMatchingEventHandler):
 
             with open (filepath, 'w', encoding="utf-8") as f:
                 f.write(new_data)
+                f.close()
                 return 1
         else:
             return 0
@@ -431,7 +443,7 @@ class myObserver(PatternMatchingEventHandler):
         self.MSG.clear()
         for line in fileList:
             if self.fixfile(line)>0:
-                fixedCounter += 1 
+                fixedCounter += 1
                 counter += 1
                 time.sleep(0.01)
             self.ui.updateBar(counter)
@@ -445,18 +457,13 @@ class myObserver(PatternMatchingEventHandler):
         self.MSG.append(self.ui.LNG['done'])
         self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
-    
-        
+
 def main():
     app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
     window = myIntarface()  # Создаём объект класса ExampleApp
     window.show()  # Показываем окно
     sys.exit(app.exec_())  # и запускаем приложение
     time.sleep(5)
-
-    
-
-    
 
 if __name__ == '__main__':  # Если мы запускаем файл напрямую, а не импортируем
     main()  # то запускаем функцию main()
