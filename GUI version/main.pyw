@@ -93,6 +93,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             with open('config.cfg', 'w+', encoding="utf-8") as defaultCfg:
                 defaultCfg.write(defaultConfig)
                 defaultCfg.close()
+            if not os.path.exists(self.CFG['workfolder']): os.makedirs(self.CFG['workfolder'])
         else:
             with open('config.cfg', 'a+', encoding="utf-8") as readCfg:
                 tempCfg = dict()
@@ -108,6 +109,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                         self.CFG[key] = tempCfg[key]
                 del tempCfg
                 readCfg.close()
+            if not os.path.exists(self.CFG['workfolder']): os.makedirs(self.CFG['workfolder'])
 
     def initLanguage(self):
         words = defaultLanguage.split('\n')
