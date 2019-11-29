@@ -4,7 +4,7 @@ import time
 import datetime
 import glob
 import chardet
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import Qt
 from shutil import move
 from watchdog.observers import Observer
@@ -16,6 +16,8 @@ import design
 defaultConfig = """language=en
 logging=True
 silentmode=True
+silenttray=False
+starttray=False
 showsettings=True
 workfolder=C:/WNC/user/iso
 """
@@ -25,7 +27,7 @@ defaultLanguage = """alias=en
 name=English
 head=Program launch
 emptywordfile=The dictionary of broken words is empty !!!
-trackedfolder=Tracked Folder:
+trackedfolder=Tracked Folder: 
 hookedfile=Hooked file: 
 menu=Menu
 openfilebutton=Open file
@@ -48,6 +50,8 @@ fixed=Fixed files:
 logbutton=Logging
 silent=Silent mode
 done=Done
+showwindow=Show
+closewindow=Close
 yes=Yes
 no=No
 exitmsg=Are you sure you want to quit?
@@ -71,6 +75,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.LNG = dict()
         self.WORD = dict()
         self.initConfig()
+        self.preUI()
         self.changeLanguage(self.CFG['language'], True)
         self.postUI()
         self.initConnect()
@@ -93,7 +98,6 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             with open('config.cfg', 'w+', encoding="utf-8") as defaultCfg:
                 defaultCfg.write(defaultConfig)
                 defaultCfg.close()
-            if not os.path.exists(self.CFG['workfolder']): os.makedirs(self.CFG['workfolder'])
         else:
             with open('config.cfg', 'a+', encoding="utf-8") as readCfg:
                 tempCfg = dict()
@@ -109,7 +113,6 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                         self.CFG[key] = tempCfg[key]
                 del tempCfg
                 readCfg.close()
-            if not os.path.exists(self.CFG['workfolder']): os.makedirs(self.CFG['workfolder'])
 
     def initLanguage(self):
         words = defaultLanguage.split('\n')
@@ -155,6 +158,35 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             if not bool(self.WORD):
                 self.textBrowser.append(self.LNG['emptywordfile'])
 
+    def preUI(self):
+        self.bFixIco = QtGui.QIcon('bF.png')
+        self.tray_icon = QtWidgets.QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.bFixIco)
+        #self.tray_icon.show()
+        self.actionShow = QtWidgets.QAction("Show", self)
+        #self.actionHide = QtWidgets.QAction("Hide", self)
+        self.actionClose = QtWidgets.QAction("Close", self)
+        self.actionShow.triggered.connect(self.show)
+        #self.actionHide.triggered.connect(self.hide)
+        self.actionClose.triggered.connect(self.close)
+        self.tray_menu = QtWidgets.QMenu()
+        self.tray_menu.addAction(self.actionShow)
+        #self.tray_menu.addAction(self.actionHide)
+        self.tray_menu.addAction(self.actionClose)
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.useTray = False
+
+    def showEvent(self, event):
+        self.useTray = False
+        self.showNormal()
+        self.tray_icon.hide()
+    def hideEvent(self, event):
+        self.useTray = True
+        self.hide()
+        self.tray_icon.show()
+    def closeEvent(self, event):
+        self.tray_icon.hide()
+        self.tray_icon.destroy()
 
     #GUI stuff
 
@@ -182,6 +214,8 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         #self.actionExit.setToolTip(str(self.LNG['exitdescription'])
         self.boxLogging.setText(self.LNG['logbutton'])
         self.boxSilentMode.setText(self.LNG['silent'])
+        self.actionShow.setText(self.LNG['showwindow'])
+        self.actionClose.setText(self.LNG['closewindow'])
 
         if init:
             self.textBrowser.append(self.LNG['head']+'\n'+
@@ -195,6 +229,13 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.boxLogging.hide()
             self.boxSilentMode.hide()
             self.boxLanguage.hide()
+        if self.CFG['starttray'] == 'True' or self.CFG['starttray'] == 'yes':
+            self.useTray = True
+            self.hide()
+            self.tray_icon.show()
+        else:
+            self.show()
+        
 
     def initConnect(self):
         self.boxLogging.toggle()
@@ -320,12 +361,45 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             with open('program.log', 'w+', encoding="utf-8") as newLog: newLog.close()
 
         with open('program.log', 'a+', encoding="utf-8") as log:
-            log.write(str(datetime.datetime.now())+' '+msg+'\n')
+            if type(msg) == str or type(msg) == int or type(msg) == float or type(msg) == bool:
+                log.write(str(datetime.datetime.now())+' '+str(msg)+'\n')
+            elif type(msg) == list:
+                bFirst = False
+                for line in msg:
+                    if not bFirst:
+                        log.write(str(datetime.datetime.now())+' '+str(line).replace('\\','/')+'\n')
+                        bFirst = True
+                    else:
+                        log.write('\t'+str(line).replace('\\','/')+'\n')
+            elif type(msg) == dict:
+                bFirst = False
+                for k, *v in msg:
+                    if not bFirst:
+                        log.write(str(datetime.datetime.now())+'\n')
+                        bFirst = True
+                    else:
+                        log.write('\t'+str(k)+'  '+str(v)+'\n')
+            else:
+                log.write('[ERROR] Unknown msg type\n')
             log.close()
 
     def addTextToWindow(self, lst):
         for line in lst:
-            self.textBrowser.append(str(line))
+            self.textBrowser.append(str(line).replace('\\','/'))
+        if self.useTray and self.CFG['silenttray'] != 'True':
+            msgHead = str()
+            msgBody = str()
+            for line in lst:
+                if len(msgHead) == 0:
+                    msgHead = line.replace(self.LNG['hookedfile'],'').replace(self.CFG['workfolder'],'').replace('\\','').replace('/','')
+                else:
+                    if len(msgBody) == 0:
+                        msgBody = line.replace('\t','')
+                    else:
+                        msgBody = msgBody + '\n' + line
+                    
+            self.tray_icon.showMessage(msgHead,msgBody,self.bFixIco)
+        self.logging(lst)
 
     def activateBar(self, maxCount):
         self.progressBar.setMaximum(maxCount)
@@ -384,7 +458,7 @@ class myObserver(PatternMatchingEventHandler):
         self.TmpNameOld = self.TmpName
 
     def fixfile(self, filepath):
-        filepath = filepath.replace('\u005C','/')
+        #filepath = filepath.replace('\u005C','/')
         fixed = 0
         fixed += self.isDecode(filepath)
         if len(self.ui.WORD) > 0:
@@ -427,13 +501,13 @@ class myObserver(PatternMatchingEventHandler):
     def openExternalFile(self, filepath):
         fixed = self.fixfile(filepath)
         if fixed >0:
-            self.MSG.insert(0, self.ui.LNG['file'].replace('\u005C','/')+filepath)
+            self.MSG.insert(0, self.ui.LNG['file']+filepath)
             self.MSG.append(self.ui.LNG['done'])
             self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
 
     def openExternalFolder(self, folderpath):
-        fileList = glob.glob(folderpath+'/*.cni')
+        fileList = glob.glob(folderpath+'\\*.cni')
         fileCount = len(fileList)
         self.ui.activateBar(fileCount)
         counter = 0
@@ -450,7 +524,7 @@ class myObserver(PatternMatchingEventHandler):
                 time.sleep(0.01)
             self.ui.updateBar(counter)
             if self.ui.CFG['silentmode'] == 'False' or self.ui.CFG['silentmode'] == 'off':
-                self.MSG.insert(0,self.ui.LNG['file'].replace('\u005C','/')+line)
+                self.MSG.insert(0,self.ui.LNG['file']+line)
                 self.MSG.append('\n')
                 self.ui.addTextToWindow(self.MSG)
             self.MSG.clear()
@@ -463,9 +537,9 @@ class myObserver(PatternMatchingEventHandler):
 def main():
     app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
     window = myIntarface()  # Создаём объект класса ExampleApp
-    window.show()  # Показываем окно
+    #window.show()  # Показываем окно
     sys.exit(app.exec_())  # и запускаем приложение
-    time.sleep(5)
+    #time.sleep(5)
 
 if __name__ == '__main__':  # Если мы запускаем файл напрямую, а не импортируем
     main()  # то запускаем функцию main()
