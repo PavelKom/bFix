@@ -63,6 +63,13 @@ defaultLNG = dict()
 languageNameList = dict() #key: alias
 languageConnectList = list()
 
+def resource_path(relative):
+
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative)
+    else:
+        return os.path.join(os.path.abspath("."), relative)
+
 class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         super().__init__()
@@ -159,7 +166,9 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.textBrowser.append(self.LNG['emptywordfile'])
 
     def preUI(self):
-        self.bFixIco = QtGui.QIcon('bF.png')
+        self.bFixIco = QtGui.QIcon(resource_path('bF.png'))
+        icon = QtGui.QIcon()
+        self.setWindowIcon(self.bFixIco)
         self.tray_icon = QtWidgets.QSystemTrayIcon(self)
         self.tray_icon.setIcon(self.bFixIco)
         #self.tray_icon.show()
