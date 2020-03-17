@@ -4,6 +4,7 @@ import time
 import datetime
 import glob
 import chardet
+import configparser
 from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import Qt
 from shutil import move
@@ -13,55 +14,50 @@ from watchdog.events import PatternMatchingEventHandler
 
 import design
 
-defaultConfig = """language=en
-logging=True
-silentmode=True
-silenttray=False
-starttray=False
-showsettings=True
-workfolder=C:/WNC/user/iso
-"""
+defCfgVal = {
+    "logging" : "True",
+    "silentmode" : "True",
+    "silenttray" : "False",
+    "starttray" : "False",
+    "showsettings" : "True",
+    "workfolder" : "C:/WNC/user/iso",
+    "externallanguage" : "None",
+    "externalbadwords" : "None"
+    }
 
-
-defaultLanguage = """alias=en
-name=English
-head=Program launch
-emptywordfile=The dictionary of broken words is empty !!!
-trackedfolder=Tracked Folder: 
-hookedfile=Hooked file: 
-menu=Menu
-openfilebutton=Open file
-openfiledescription=Fix file
-openfolderbutton=Open folder
-openfolderdescription=Fix files in folder
-clearbutton=Clear window
-cleardescription=Clear text window
-exitbutton=Exit
-exitdescription=Exit the program
-file=File: 
-time=Time:
-decode=Change encoding: 
-corruptedword1=Corrupted word: 
-corruptedword2=Fixed on: 
-corruptedword3=Number of fixes: 
-folder=Folder: 
-founded=Files found: 
-fixed=Fixed files:
-logbutton=Logging
-silent=Silent mode
-done=Done
-showwindow=Show
-closewindow=Close
-yes=Yes
-no=No
-exitmsg=Are you sure you want to quit?
-"""
-
-defaultCFG = dict()
-defaultLNG = dict()
-
-languageNameList = dict() #key: alias
-languageConnectList = list()
+defLngVal = {
+    "head" : "Program launch",
+    "emptywordfile" : "The dictionary of broken words is empty !!!",
+    "trackedfolder" : "Tracked Folder: ",
+    "hookedfile" : "Hooked file: ",
+    "menu" : "Menu",
+    "openfilebutton" : "Open file",
+    "openfiledescription" : "Fix file",
+    "openfolderbutton" : "Open folder",
+    "openfolderdescription" : "Fix files in folder",
+    "clearbutton" : "Clear window",
+    "cleardescription" : "Clear text window",
+    "exitbutton" : "Exit",
+    "exitdescription" : "Exit the program",
+    "file" : "File: ",
+    "time" : "Time: ",
+    "decode" : "Change encoding: ",
+    "corruptedword1" : "Corrupted word: ",
+    "corruptedword2" : "Fixed on: ",
+    "corruptedword3" : "Number of fixes: ",
+    "folder" : "Folder: ",
+    "founded" : "Files found: ",
+    "fixed" : "Fixed files: ",
+    "logbutton" : "Logging",
+    "silent" : "Silent mode",
+    "done" : "Done",
+    "showwindow" : "Show",
+    "closewindow" : "Close",
+    "yes" : "Yes",
+    "no" : "No",
+    "exitmsg" : "Are you sure you want to quit?",
+    "about" : "About"
+    }
 
 def resource_path(relative):
 
@@ -78,92 +74,83 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.progressBar.hide()
         self.textAbout.hide()
         self.pushButtonOk.hide()
-        self.CFG = dict()
-        self.LNG = dict()
-        self.WORD = dict()
-        self.initConfig()
+        self.config = configparser.ConfigParser(allow_no_value=True)
+        self.config.optionxform = str
+        self.brokenWordCount = 0
         self.preUI()
-        self.changeLanguage(self.CFG['language'], True)
+        self.initConfig()
+        self.guiLanguage()
         self.postUI()
         self.initConnect()
-        self.initWordReplacer()
         self.observer = Observer()
         self.myobserver = myObserver(self)
-        self.observer.schedule(self.myobserver, path=self.CFG['workfolder'], recursive=True)
+        self.observer.schedule(self.myobserver, path=self.config.get("CONFIG",'workfolder'), recursive=True)
         self.observer.start()
 
     #Initialize programm
-
+        
     def initConfig(self):
-        configs = defaultConfig.split('\n')
-        for line in configs:
-            key, *value = line.split('=')
-            defaultCFG[key] = str(value).replace("'",'').replace('[','').replace(']','')
-            self.CFG[key] = str(value).replace("'",'').replace('[','').replace(']','')
-
         if not os.path.exists('config.cfg'):
             with open('config.cfg', 'w+', encoding="utf-8") as defaultCfg:
-                defaultCfg.write(defaultConfig)
                 defaultCfg.close()
-        else:
-            with open('config.cfg', 'a+', encoding="utf-8") as readCfg:
-                tempCfg = dict()
-                readCfg.seek(0)
-                readCfgList = readCfg.read().split('\n')
-                for line in readCfgList:
-                    key, *value = line.split('=')
-                    tempCfg[key] = str(value).replace("'",'').replace('[','').replace(']','')
-                for key in defaultCFG.keys():
-                    if tempCfg.get(key) == None:
-                        readCfg.write(key+'='+ defaultCFG[key]+'\n')
-                    else:
-                        self.CFG[key] = tempCfg[key]
-                del tempCfg
-                readCfg.close()
+        
+        self.config.read('config.cfg',encoding="utf-8")
+        
+        if not self.config.has_section("CONFIG"):
+            self.config.add_section("CONFIG")
+        for key, val in defCfgVal.items():
+            if (not self.config.has_option("CONFIG", key)) or (self.config.get("CONFIG", key) == None):
+                self.config.set("CONFIG", key, val)
 
-    def initLanguage(self):
-        words = defaultLanguage.split('\n')
-        for line in words:
-            key, *value = line.split('=')
-            defaultLNG[key] = str(value).replace("'",'').replace('[','').replace(']','')
-            self.LNG[key] = str(value).replace("'",'').replace('[','').replace(']','')
+        if not self.config.has_section("LANGUAGE"):
+            self.config.add_section("LANGUAGE")
+        for key, val in defLngVal.items():
+            if (not self.config.has_option("LANGUAGE", key)) or (self.config.get("LANGUAGE", key) == None):
+                self.config.set("LANGUAGE", key, val)
 
-        if not os.path.exists('lang'): os.makedirs('lang')
-        if not os.path.exists('lang/en.lang'):
-            with open('lang/en.lang', 'w+', encoding="utf-8") as defaultLng:
-                defaultLng.write(defaultLanguage)
-                defaultLng.close()
-        else:
-            with open('lang/en.lang', 'a+', encoding="utf-8") as readDefLng:
-                tempLng = dict()
-                readDefLng.seek(0)
-                readLngList = readDefLng.read().split('\n')
-                for line in readLngList:
-                    key, *value = line.split('=')
-                    tempLng[key] = str(value).replace("'",'').replace('[','').replace(']','')
-                for key in defaultLNG.keys():
-                    if tempLng.get(key) == None:
-                        readDefLng.write(key+'='+ defaultLNG[key]+'\n')
-                    else:
-                        self.LNG[key] = tempLng[key]
-                del tempLng
-                readDefLng.close()
+        if not self.config.has_section("BROKEN WORDS"):
+            self.config.add_section("BROKEN WORDS")
+            self.config.set("BROKEN WORDS", ";Dictionary of corrupted words")
+        self.updateCfg()
 
-    def initWordReplacer(self):
-        if not os.path.exists('word.list'):
-            with open('word.list', 'w+', encoding="utf-8") as defaultWord:
-                defaultWord.close()
-                self.textBrowser.append(self.LNG['emptywordfile'])
-        else:
-            with open('word.list', 'r', encoding="utf-8") as readWord:
-                for line in readWord:
-                    line = line.replace("\n",'')
-                    key, *value = line.split('=')
-                    self.WORD[key] = str(value).replace("'",'').replace('[','').replace(']','')
-                    self.textBrowser.append(key+'    '+self.WORD[key])
-                readWord.close()
-            if not bool(self.WORD):
-                self.textBrowser.append(self.LNG['emptywordfile'])
+        if self.config.get("CONFIG", "externallanguage") != None and self.config.get("CONFIG", "externallanguage") != "None":
+            customLang = configparser.ConfigParser(allow_no_value=True)
+            customLang.optionxform = str
+            try:
+                customLang.read(self.config.get("CONFIG", "externallanguage"),encoding="utf-8")
+                if customLang.has_section("LANGUAGE"):
+                    for key in customLang.options("LANGUAGE"):
+                        if customLang.get("LANGUAGE",key) == None:
+                            continue
+                        self.config.set("LANGUAGE",key, customLang.get("LANGUAGE",key))
+            except:
+                pass
+
+        if self.config.get("CONFIG", "externalbadwords") != None and self.config.get("CONFIG", "externalbadwords") != "None":
+            customWords = configparser.ConfigParser(allow_no_value=True)
+            customWords.optionxform = str
+            try:
+                customWords.read(self.config.get("CONFIG", "externalbadwords"),encoding="utf-8")
+                if customWords.has_section("BROKEN WORDS"):
+                    for key in customWords.options("BROKEN WORDS"):
+                        if customWords.get("BROKEN WORDS",key) == None:
+                            continue
+                        self.config.set("BROKEN WORDS",key, customWords.get("BROKEN WORDS",key))
+                        self.brokenWordCount += 1
+            except:
+                pass
+
+        
+        for sector in self.config.sections():
+            for key in self.config.options(sector):
+                if self.config[sector][key] == None:
+                    self.config.remove_option(sector, key)
+        
+                    
+    def updateCfg(self):
+        with open("config.cfg", "w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
+            config_file.close()
 
     def preUI(self):
         self.bFixIco = QtGui.QIcon(resource_path('bF.png'))
@@ -199,159 +186,76 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     #GUI stuff
 
-    def changeLanguage(self, lang, init = False):
-        self.initLanguage()
-
-        if not os.path.exists('lang/'+lang+'.lang'):
-            self.changeLanguage('en')
-
-        with open('lang/'+lang+'.lang', 'r', encoding="utf-8") as readLng:
-            for line in readLng:
-                line = line.replace('\n','')
-                key, *value = line.split('=')
-                self.LNG[key] = str(value).replace("'",'').replace('[','').replace(']','')
-            readLng.close()
-
-        self.menuFile.setTitle(self.LNG['menu'])
-        self.actionOpenFile.setText(self.LNG['openfilebutton'])
-        #self.actionOpenFile.setToolTip(self.LNG['openfiledescription'])
-        self.actionOpenFolder.setText(self.LNG['openfolderbutton'])
-        #self.actionOpenFolder.setToolTip(self.LNG['openfolderdescription'])
-        self.actionClearWindow.setText(self.LNG['clearbutton'])
-        #self.actionClearWindow.setToolTip(self.LNG['cleardescription'])
-        self.actionExit.setText(self.LNG['exitbutton'])
+    def guiLanguage(self):
+        #self.config.get("LANGUAGE",msg)
+        #self.config["LANGUAGE"][msg]
+        
+        self.menuFile.setTitle(self.config["LANGUAGE"]['menu'])
+        self.actionOpenFile.setText(self.config["LANGUAGE"]['openfilebutton'])
+        #self.actionOpenFile.setToolTip(self.config["LANGUAGE"]['openfiledescription'])
+        self.actionOpenFolder.setText(self.config["LANGUAGE"]['openfolderbutton'])
+        #self.actionOpenFolder.setToolTip(self.config["LANGUAGE"]['openfolderdescription'])
+        self.actionClearWindow.setText(self.config["LANGUAGE"]['clearbutton'])
+        #self.actionClearWindow.setToolTip(self.config["LANGUAGE"]['cleardescription'])
+        self.actionAbout.setText(self.config["LANGUAGE"]['about'])
+        self.actionExit.setText(self.config["LANGUAGE"]['exitbutton'])
         #self.actionExit.setToolTip(str(self.LNG['exitdescription'])
-        self.boxLogging.setText(self.LNG['logbutton'])
-        self.boxSilentMode.setText(self.LNG['silent'])
-        self.actionShow.setText(self.LNG['showwindow'])
-        self.actionClose.setText(self.LNG['closewindow'])
+        self.boxLogging.setText(self.config["LANGUAGE"]['logbutton'])
+        self.boxSilentMode.setText(self.config["LANGUAGE"]['silent'])
+        self.actionShow.setText(self.config["LANGUAGE"]['showwindow'])
+        self.actionClose.setText(self.config["LANGUAGE"]['closewindow'])
 
-        if init:
-            self.textBrowser.append(self.LNG['head']+'\n'+
-                                     self.LNG['trackedfolder']+
-                                     self.CFG['workfolder']+'\n')
-            self.logging(self.LNG['head'])
-            self.logging(self.LNG['trackedfolder']+self.CFG['workfolder'])
+        self.textBrowser.append(self.config["LANGUAGE"]['head']+'\n'+
+                                self.config["LANGUAGE"]['trackedfolder']+" "+
+                                self.config["CONFIG"]['workfolder']+'\n')
+        self.logging(self.config["LANGUAGE"]['head'])
+        self.logging(self.config["LANGUAGE"]['trackedfolder']+self.config["CONFIG"]['workfolder'])
 
+        for key in self.config.options("BROKEN WORDS"):
+            self.brokenWordCount += 1
+        if self.brokenWordCount == 0:
+            self.textBrowser.append(self.config["LANGUAGE"]["emptywordfile"])
+        
     def postUI(self):
-        if self.CFG['showsettings'] == 'False' or self.CFG['showsettings'] == 'no':
+        if not self.config.getboolean("CONFIG",'showsettings'):
             self.boxLogging.hide()
             self.boxSilentMode.hide()
             self.boxLanguage.hide()
-        if self.CFG['starttray'] == 'True' or self.CFG['starttray'] == 'yes':
+        if self.config.getboolean("CONFIG",'starttray'):
             self.useTray = True
             self.hide()
             self.tray_icon.show()
         else:
             self.show()
-        
 
     def initConnect(self):
         self.boxLogging.toggle()
-        if self.CFG['logging'] == 'True':
+        if self.config.getboolean("CONFIG",'logging'):
             self.boxLogging.setCheckState(Qt.Checked)
         self.boxLogging.stateChanged.connect(self.updateLogButton)
 
         self.boxSilentMode.toggle()
-        if self.CFG['silentmode'] == 'True':
+        if self.config.getboolean("CONFIG",'silentmode') == 'True':
             self.boxSilentMode.setCheckState(Qt.Checked)
         self.boxSilentMode.stateChanged.connect(self.updateSilentButton)
-
-        self.boxLanguage.activated['int'].connect(self.changeLanguageButton)
-        self.updateLangList()
-        self.boxLanguage.setCurrentText(languageNameList[self.CFG['language']])
 
         self.actionOpenFile.triggered.connect(self.openFile)
         self.actionOpenFolder.triggered.connect(self.openFolder)
         self.actionExit.triggered.connect(QtWidgets.qApp.quit)
 
-
-    def changeLanguageButton(self, num):
-        text = languageConnectList[num]
-        self.changeLanguage(text)
-        self.updateLangList()
-
-        with open ('config.cfg', 'r') as f:
-                old_data = f.read()
-                f.close()
-                new_data = old_data.replace('language='+self.CFG['language'], 'language='+text)
-                with open ('config.cfg', 'w') as f:
-                    f.write(new_data)
-                    f.close()
-
-    def updateLangList(self):
-        #self.boxLanguage.clear()
-        #languageConnectList.clear()
-        langList = glob.glob('lang/*.lang')
-        for line in langList:
-            locale = line.replace('lang\\','').replace('.lang','')
-            if not bool(languageNameList):
-                self.addLanguageInMenu(locale)
-            else:
-                try:
-                    num = self.boxLanguage.findText(languageNameList[locale])
-                except KeyError:
-                    self.addLanguageInMenu(locale)
-
-    def addLanguageInMenu(self, lang):
-        with open('lang/'+lang+'.lang', 'r', encoding="utf-8") as defaultCfg:
-            tmpAlias = str()
-            tmpName = str()
-            for tmpline in defaultCfg:
-                tmpline = tmpline.replace('\n','')
-                key, *value = tmpline.split('=')
-                if key == 'alias':
-                    tmpAlias = str(value).replace("'",'').replace('[','').replace(']','')
-                if key == 'name':
-                    tmpName = str(value).replace("'",'').replace('[','').replace(']','')
-            if tmpAlias != '' and tmpName != '':
-                languageNameList[tmpAlias] = tmpName
-                self.boxLanguage.addItem(tmpName)
-                languageConnectList.append(tmpAlias)
-            else:
-                #self.errorLog('[Language] Broken locale file: '+line)
-                pass
-            defaultCfg.close()
-
     def updateLogButton(self, state):
         if state == Qt.Checked:
-            self.CFG['logging'] = 'True'
-            with open ('config.cfg', 'r') as f:
-                old_data = f.read()
-                f.close()
-                new_data = old_data.replace('logging=False', 'logging=True')
-                with open ('config.cfg', 'w') as f:
-                    f.write(new_data)
-                    f.close()
+            self.config.set("CONFIG",'logging','True')
         else:
-            self.CFG['logging'] = 'False'
-            with open ('config.cfg', 'r') as f:
-                old_data = f.read()
-                f.close()
-                new_data = old_data.replace('logging=True', 'logging=False')
-                with open ('config.cfg', 'w') as f:
-                    f.write(new_data)
-                    f.close()
+            self.config.set("CONFIG",'logging','False')
+        self.updateCfg()
 
     def updateSilentButton(self, state):
         if state == Qt.Checked:
-            self.CFG['silentmode'] = 'True'
-            with open ('config.cfg', 'r') as f:
-                old_data = f.read()
-                f.close()
-                new_data = old_data.replace('silentmode=False', 'silentmode=True')
-                with open ('config.cfg', 'w') as f:
-                    f.write(new_data)
-                    f.close()
+            self.config.set("CONFIG",'silentmode','True')
         else:
-            self.CFG['silentmode'] = 'False'
-            with open ('config.cfg', 'r') as f:
-                old_data = f.read()
-                f.close()
-                new_data = old_data.replace('silentmode=True', 'silentmode=False')
-                with open ('config.cfg', 'w') as f:
-                    f.write(new_data)
-                    f.close()
+            self.config.set("CONFIG",'silentmode','False')
+        self.updateCfg()
 
     def openFile(self):
         fname = QtWidgets.QFileDialog.getOpenFileName(self, '', '', 'CNI (*.cni)')[0]
@@ -364,7 +268,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.myobserver.openExternalFolder(filename)
 
     def logging(self, msg):
-        if self.CFG['logging'] == 'False' or self.CFG['logging'] == 'no': return
+        if not self.config.getboolean("CONFIG",'logging'): return
 
         if not os.path.exists('program.log'):
             with open('program.log', 'w+', encoding="utf-8") as newLog: newLog.close()
@@ -395,12 +299,12 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def addTextToWindow(self, lst):
         for line in lst:
             self.textBrowser.append(str(line).replace('\\','/'))
-        if self.useTray and self.CFG['silenttray'] != 'True':
+        if self.useTray and not self.config.getboolean("CONFIG",'silenttray'):
             msgHead = str()
             msgBody = str()
             for line in lst:
                 if len(msgHead) == 0:
-                    msgHead = line.replace(self.LNG['hookedfile'],'').replace(self.CFG['workfolder'],'').replace('\\','').replace('/','')
+                    msgHead = line.replace(self.config.get("LANGUAGE","hookedfile"),'').replace(self.config.get("CONFIG","workfolder"),'').replace('\\','').replace('/','')
                 else:
                     if len(msgBody) == 0:
                         msgBody = line.replace('\t','')
@@ -452,6 +356,7 @@ class myObserver(PatternMatchingEventHandler):
         event.src_path
             path/to/observed/file
         """
+        
         self.TmpTime = datetime.datetime.now()
         self.TmpName = event.src_path
 
@@ -460,7 +365,7 @@ class myObserver(PatternMatchingEventHandler):
 
         self.fixfile(event.src_path)
         if len(self.MSG) >0:
-            self.MSG.insert(0, self.ui.LNG['hookedfile']+event.src_path)
+            self.MSG.insert(0, self.ui.config.get("LANGUAGE",'hookedfile')+event.src_path)
             self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
         self.TmpTimeOld = self.TmpTime
@@ -470,9 +375,9 @@ class myObserver(PatternMatchingEventHandler):
         #filepath = filepath.replace('\u005C','/')
         fixed = 0
         fixed += self.isDecode(filepath)
-        if len(self.ui.WORD) > 0:
-            for key in self.ui.WORD.keys():
-                fixed += self.isReplaceWord(filepath, key, self.ui.WORD.get(key))
+        if self.ui.brokenWordCount > 0:
+            for key in self.ui.config.options("BROKEN WORDS"):
+                fixed += self.isReplaceWord(filepath, key, self.ui.config.get("BROKEN WORDS",key))
         return fixed
 
     def isDecode(self, filepath):
@@ -510,8 +415,8 @@ class myObserver(PatternMatchingEventHandler):
     def openExternalFile(self, filepath):
         fixed = self.fixfile(filepath)
         if fixed >0:
-            self.MSG.insert(0, self.ui.LNG['file']+filepath)
-            self.MSG.append(self.ui.LNG['done'])
+            self.MSG.insert(0, self.ui.config.get("LANGUAGE",'file')+filepath)
+            self.MSG.append(self.ui.config.get("LANGUAGE",'done'))
             self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
 
@@ -521,8 +426,8 @@ class myObserver(PatternMatchingEventHandler):
         self.ui.activateBar(fileCount)
         counter = 0
         fixedCounter = 0
-        self.MSG.append(self.ui.LNG['folder']+folderpath)
-        self.MSG.append(self.ui.LNG['founded']+str(fileCount))
+        self.MSG.append(self.ui.config.get("LANGUAGE",'folder')+folderpath)
+        self.MSG.append(self.ui.config.get("LANGUAGE",'founded')+str(fileCount))
         self.MSG.append('\n')
         self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
@@ -532,14 +437,14 @@ class myObserver(PatternMatchingEventHandler):
                 counter += 1
                 time.sleep(0.01)
             self.ui.updateBar(counter)
-            if self.ui.CFG['silentmode'] == 'False' or self.ui.CFG['silentmode'] == 'off':
-                self.MSG.insert(0,self.ui.LNG['file']+line)
+            if not self.ui.config.getboolean("CONFIG",'silentmode'):
+                self.MSG.insert(0,self.ui.config.get("LANGUAGE",'file')+line)
                 self.MSG.append('\n')
                 self.ui.addTextToWindow(self.MSG)
             self.MSG.clear()
         self.ui.deactivateBar()
-        self.MSG.append(self.ui.LNG['fixed']+str(fixedCounter))
-        self.MSG.append(self.ui.LNG['done'])
+        self.MSG.append(self.ui.config.get("LANGUAGE",'fixed')+str(fixedCounter))
+        self.MSG.append(self.ui.config.get("LANGUAGE",'done'))
         self.ui.addTextToWindow(self.MSG)
         self.MSG.clear()
 
