@@ -6,7 +6,7 @@ import glob
 import chardet
 import configparser
 from PyQt5 import QtWidgets, QtGui
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread
 from shutil import move
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -299,6 +299,7 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def addTextToWindow(self, lst):
         for line in lst:
             self.textBrowser.append(str(line).replace('\\','/'))
+            
         if self.useTray and not self.config.getboolean("CONFIG",'silenttray'):
             msgHead = str()
             msgBody = str()
@@ -313,6 +314,13 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     
             self.tray_icon.showMessage(msgHead,msgBody,self.bFixIco)
         self.logging(lst)
+        horScrollBar = self.textBrowser.horizontalScrollBar()
+        verScrollBar = self.textBrowser.verticalScrollBar()
+        scrollIsAtEnd = verScrollBar.maximum() - verScrollBar.value() >= 10
+
+        if scrollIsAtEnd:
+            verScrollBar.setValue(verScrollBar.maximum()) # Scrolls to the bottom
+            horScrollBar.setValue(0) # scroll to the left
 
     def activateBar(self, maxCount):
         self.progressBar.setMaximum(maxCount)
@@ -327,16 +335,65 @@ class myIntarface(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.progressBar.setMaximum(0)
         self.progressBar.setValue(0)
 
+class copyFolderThread(QThread):
+    def __init__(self, observ):
+        super().__init__()
+        self.observ = observ
+        self.folderList = list()
+        self.MSG = []
+
+    def addFolder(self, fname):
+        self.folderList.append(fname)
+        self.start()
+
+    def run(self):
+        if not len(self.folderList):
+            return
+        self.observ.ui.actionOpenFolder.setEnabled(False)
+        for folderpath in self.folderList:
+            print(folderpath)
+            fileList = glob.glob(folderpath+'\\*.cni')
+            #print(fileList)
+            fileCount = len(fileList)
+            self.observ.ui.activateBar(fileCount)
+            counter = 0
+            fixedCounter = 0
+            self.MSG.append(self.observ.ui.config.get("LANGUAGE",'folder')+folderpath)
+            self.MSG.append(self.observ.ui.config.get("LANGUAGE",'founded')+str(fileCount))
+            self.MSG.append('\n')
+            self.observ.ui.addTextToWindow(self.MSG)
+            self.MSG.clear()
+            for line in fileList:
+                counter += 1
+                QThread.msleep(10)
+                if self.observ.fixfile(line)>0:
+                    fixedCounter += 1
+                self.observ.ui.updateBar(counter)
+                if not self.observ.ui.config.getboolean("CONFIG",'silentmode'):
+                    self.MSG.insert(0,self.observ.ui.config.get("LANGUAGE",'file')+line)
+                    self.MSG.append('\n')
+                    self.observ.ui.addTextToWindow(self.MSG)
+                self.MSG.clear()
+            self.observ.ui.deactivateBar()
+            self.MSG.append(self.observ.ui.config.get("LANGUAGE",'fixed')+str(fixedCounter))
+            self.MSG.append(self.observ.ui.config.get("LANGUAGE",'done'))
+            self.observ.ui.addTextToWindow(self.MSG)
+            self.MSG.clear()
+        self.folderList.clear()
+        self.observ.ui.actionOpenFolder.setEnabled(True)
+        
+
 class myObserver(PatternMatchingEventHandler):
     patterns = ["*.cni", "*.CNI"]
     def __init__(self, interface):
         super().__init__()
         self.ui = interface
-        self.MSG = list()
+        self.MSG = []
         self.TmpTime = datetime.datetime.now()
         self.TmpTimeOld = self.TmpTime
-        self.TmpName = str()
-        self.TmpNameOld = str()
+        self.TmpName = []
+        self.TmpNameOld = []
+        self.copyThread = copyFolderThread(self)
 
     def on_modified(self, event):
         self.filetrack(event)
@@ -421,32 +478,8 @@ class myObserver(PatternMatchingEventHandler):
         self.MSG.clear()
 
     def openExternalFolder(self, folderpath):
-        fileList = glob.glob(folderpath+'\\*.cni')
-        fileCount = len(fileList)
-        self.ui.activateBar(fileCount)
-        counter = 0
-        fixedCounter = 0
-        self.MSG.append(self.ui.config.get("LANGUAGE",'folder')+folderpath)
-        self.MSG.append(self.ui.config.get("LANGUAGE",'founded')+str(fileCount))
-        self.MSG.append('\n')
-        self.ui.addTextToWindow(self.MSG)
-        self.MSG.clear()
-        for line in fileList:
-            if self.fixfile(line)>0:
-                fixedCounter += 1
-                counter += 1
-                time.sleep(0.01)
-            self.ui.updateBar(counter)
-            if not self.ui.config.getboolean("CONFIG",'silentmode'):
-                self.MSG.insert(0,self.ui.config.get("LANGUAGE",'file')+line)
-                self.MSG.append('\n')
-                self.ui.addTextToWindow(self.MSG)
-            self.MSG.clear()
-        self.ui.deactivateBar()
-        self.MSG.append(self.ui.config.get("LANGUAGE",'fixed')+str(fixedCounter))
-        self.MSG.append(self.ui.config.get("LANGUAGE",'done'))
-        self.ui.addTextToWindow(self.MSG)
-        self.MSG.clear()
+        self.copyThread.addFolder(folderpath)
+
 
 def main():
     app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
